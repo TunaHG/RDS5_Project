@@ -1,0 +1,546 @@
+---
+title: "Regression Project"
+author: "Team 2 (김주우 김하균 박경민 이지은)"
+date: "2019년 1월 31일"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#**주제**
+기후와 경제를 이용한 미세먼지 예측
+
+## **목차**
+1. 데이터 셋 만들기 <br>
+2. EDA <br>
+3. 회귀분석 <br>
+
+### **1. 데이터 셋 만들기**
+
+#### **i) 데이터 수집**
+|사용데이터  | 데이터 수집 사이트      | 사이트 링크                                                                       |
+|:----------:|:------------------------|:----------------------------------------------------------------------------------|
+|미세먼지    | 에어코리아              | http://www.airkorea.or.kr/web/last_amb_hour_data?pMENU_NO=123                     |
+|기후        | 기상청 기상자료개방포털 | https://data.kma.go.kr/data/grnd/selectAsosRltmList.do?pgmNo=36                   |
+|코스피 지수 | 네이버 증권 크롤링      | https://finance.naver.com/sise/sise_index.nhn?code=KOSPI                          |
+|석유 소비량 | 서울 열린 데이터 광장   | http://data.seoul.go.kr/dataList/datasetView.do?infId=128&srvType=S&serviceKind=2 |
+|경유 소비량 | 한국 석유 공사          | http://www.petronet.co.kr/main2.jsp                                               |
+
+각각 서울시 내의 25개의 구에 관한 데이터들을 수집.
+
+#### **ii) 데이터 변환**
+2010년 ~ 2017년까지의 데이터를 수집하여 서울시 25개의 구와 날짜(일)를 기준으로 잡고 데이터를 변환
+```{r, message=FALSE}
+library(tidyverse)
+
+setwd("C:/FastCampus/Regression Project/")
+```
+
+
+##### A. 미세먼지
+구별/시간별 데이터를 수집
+```{r}
+load(file = "data/PM.RData")
+
+head(PM)
+```
+구별/일별 데이터로 변환
+```{r}
+# loc <- levels(PM$location)
+# location <- c()
+# year <- c()
+# month <- c()
+# day <- c()
+# SO2 <- c()
+# CO <- c()
+# O3 <- c()
+# NO2 <- c()
+# PM10 <- c()
+# for(a in loc){
+#   for(b in 2010:2017){
+#     for(c in 1:12){
+#       if(b %in% c(2012, 2016)){
+#         if(c %in% c(1, 3, 5, 7, 8, 10, 12)){
+#           day.date <- 31
+#         } else if(c == 2){
+#           day.date <- 29
+#         } else {
+#           day.date <- 30
+#         }
+#       } else {
+#         if(c %in% c(1, 3, 5, 7, 8, 10, 12)){
+#           day.date <- 31
+#         } else if(c == 2){
+#           day.date <- 28
+#         } else {
+#           day.date <- 30
+#         }
+#       }
+#       for(d in 1:day.date){
+#         data <- PM %>%
+#           dplyr::filter((location == a) & (year == b) & (month == c) & (day == d))
+#         location <- c(location, levels(data$location)[1])
+#         year <- c(year, data$year[1])
+#         month <- c(month, data$month[1])
+#         day <- c(day, data$day[1])
+#         SO2 <- c(SO2, round(mean(data$SO2, na.rm = TRUE), digits = 3))
+#         CO <- c(CO, round(mean(data$CO, na.rm = TRUE), digits = 1))
+#         O3 <- c(O3, round(mean(data$O3, na.rm = TRUE), digits = 3))
+#         NO2 <- c(NO2, round(mean(data$NO2, na.rm = TRUE), digits = 3))
+#         PM10 <- c(PM10, round(mean(data$PM10, na.rm = TRUE), digits = 0))
+#       }
+#     }
+#   }
+# }
+# location2 <- rep(loc, each = 2922)
+# dailyPM <- data.frame(location2, year, month, day, SO2, CO, O3, NO2, PM10)
+load(file = 'data/dailyPM.Rdata')
+head(dailyPM)
+```
+
+
+##### B. 기후
+기상청 기상자료개방포털에서 시간별, 일별자료를 제공하는데 일별 데이터를 수집
+```{r}
+weather.data <- readxl::read_excel(path = "data/기후/기후통합.xlsx", sheet = 1, col_names = TRUE)
+head(weather.data)
+```
+구별/일별 데이터로 변환
+```{r}
+weather.data$year <- NULL
+weather.data$month <- NULL
+weather.data$day <- NULL
+weather <- rbind(weather.data, weather.data, weather.data, weather.data, weather.data, 
+                 weather.data, weather.data, weather.data, weather.data, weather.data, 
+                 weather.data, weather.data, weather.data, weather.data, weather.data, 
+                 weather.data, weather.data, weather.data, weather.data, weather.data, 
+                 weather.data, weather.data, weather.data, weather.data, weather.data)
+PM <- cbind(dailyPM, weather)
+head(PM)
+```
+
+##### C. 코스피
+네이버 증권, 국내증시에서 아래의 일별 체결가를 찾은 후 크롤링
+```{r, message=FALSE}
+library(httr)
+library(rvest)
+```
+
+```{r}
+result <- data.frame()
+for(i in 1:380){
+  res <- GET(url = 'https://finance.naver.com/sise/sise_index_day.nhn',
+             query = list(code = 'KOSPI',
+                          page = i))
+  items <- res %>%
+    read_html() %>%
+    html_nodes(css = 'table.type_1') %>%
+    html_table(fill = TRUE) %>%
+    as.data.frame() %>%
+    na.omit() %>%
+    dplyr::select(1:2)
+  result <- rbind(result, items)
+}
+head(result)
+```
+이 때 코스피에서 빠진 날짜가 많았기 때문에 모든 날짜를 포함한 데이터를 만들어 병합
+```{r}
+kospi.data <- readxl::read_excel(path = "data/kospi/kospi.xlsx", sheet = 1, col_names = TRUE)
+head(kospi.data)
+comp <- readxl::read_excel(path = "data/kospi/comparison.xlsx", sheet = 1, col_names = TRUE)
+head(comp)
+kospi.result <- dplyr::left_join(comp, kospi.data, by = c("year", "month", "day"))
+head(kospi.result)
+```
+또한 코스피는 일별데이터로 만들었기 때문에 데이터를 중복하여 구별/일별데이터로 변환
+```{r}
+kospi <- rep(kospi.result$price, time = 25)
+kospi <- kospi %>% gsub(pattern = ',', replacement = '') %>% as.numeric()
+PM <- cbind(PM, kospi)
+head(PM)
+```
+
+##### D. 석유 소비량
+월별 데이터로 수집
+```{r}
+report <- readxl::read_excel(path = "data/경유/report.xlsx", sheet = 1, col_names = TRUE)
+
+head(report)
+```
+데이터를 중복하여 구별/일별 데이터로 변환
+```{r}
+# colnames(report) <- c("year", "month", "gasoline", "kerosene", "bunker", "LPG")
+# loc <- levels(dailyPM$location)
+# gasoline <- c()
+# kerosene <- c()
+# bunker <- c()
+# LPG <- c()
+# for(a in loc){
+#   for(b in 2010:2017){
+#     for(c in 1:12){
+#       if(b %in% c(2012, 2016)){
+#         if(c %in% c(1, 3, 5, 7, 8, 10, 12)){
+#           day.date <- 31
+#         } else if(c == 2){
+#           day.date <- 29
+#         } else {
+#           day.date <- 30
+#         }
+#       } else {
+#         if(c %in% c(1, 3, 5, 7, 8, 10, 12)){
+#           day.date <- 31
+#         } else if(c == 2){
+#           day.date <- 28
+#         } else {
+#           day.date <- 30
+#         }
+#       }
+#       for(d in 1:day.date){
+#         data <- report %>% 
+#           dplyr::filter((year == b) & (month == c))
+#         gasoline <- c(gasoline, data$gasoline)
+#         kerosene <- c(kerosene, data$kerosene)
+#         bunker <- c(bunker, data$bunker)
+#         LPG <- c(LPG, data$LPG)
+#       }
+#     }
+#   }
+# }
+# report <- data.frame(gasoline, kerosene, bunker, LPG)
+load(file = 'data/report.Rdata')
+PM <- cbind(PM, report)
+head(PM)
+```
+
+##### E. 경유 소비량
+구별/월별 데이터로 수집
+```{r}
+oil.data <- readxl::read_excel(path = "data/경유/oil.xlsx", sheet = 1, col_names = TRUE)
+
+head(oil.data)
+```
+구별/일별 데이터로 변환
+```{r}
+# oil <- c()
+# for(a in loc){
+#   for(b in 2010:2017){
+#     for(c in 1:12){
+#       if(b %in% c(2012, 2016)){
+#         if(c %in% c(1, 3, 5, 7, 8, 10, 12)){
+#           day.date <- 31
+#         } else if(c == 2){
+#           day.date <- 29
+#         } else {
+#           day.date <- 30
+#         }
+#       } else {
+#         if(c %in% c(1, 3, 5, 7, 8, 10, 12)){
+#           day.date <- 31
+#         } else if(c == 2){
+#           day.date <- 28
+#         } else {
+#           day.date <- 30
+#         }
+#       }
+#       for(d in 1:day.date){
+#         data <- oil.data %>% 
+#           dplyr:filter((year == b) & (month == c)) %>% 
+#           dplyr::select(a)
+#         oil <- c(oil, data)
+#       }
+#     }
+#   }
+# }
+load(file = 'data/oil.Rdata')
+PM <- cbind(PM, oil)
+head(PM)
+```
+
+##### iii) 데이터 변수 설명
+
+|변수명      | 변수 설명                                  | 단위                 |
+|:----------:|:-------------------------------------------|:---------------------|
+|SO2         | 대기오염물질, 아황산가스의 공기 중 농도    | ppm                  |
+|CO          | 대기오염물질, 일산화탄소의 공기 중 농도    | ppm                  |
+|O3          | 대기오염물질,       오존의 공기 중 농도    | ppm                  |
+|NO2         | 대기오염물질, 이산화질소의 공기 중 농도    | ppm                  |
+|PM10        | 1000분의 10mm보다 작은 먼지의 공기 중 농도 | microgram/cubicmeter |
+|temp        | 기온                                       | ℃                    |
+|prec        | 강수량                                     | mm                   |
+|cbwd        | 풍향                                       | Deg                  |
+|ws          | 풍속                                       | m/s                  |
+|humi        | 상대습도                                   | %                    |
+|pres        | 기압                                       | hPa                  |
+|oil         | 경유                                       | KL                   |
+|gasoline    | 휘발유                                     | 천배럴, 1000bbl      |
+|kerosene    | 등유                                       | 천배럴, 1000bbl      |
+|bunker      | 벙커C유                                    | 천배럴, 1000bbl      |
+|LPG         | LPG                                        | 천배럴, 1000bbl      |
+|kospi       | 국내증시 코스피지수 체결가                 |                      |
+
+
+### **2. EDA**
+#### **i) 자료분석**
+```{r}
+str(PM)
+summary(PM)
+```
+##### A. 풍향 변환
+풍향은 질적변수인데, 수치형으로 되어있으니 범주형으로 바꿔준다.
+```{r}
+PM$cbwd <- as.factor(PM$cbwd)
+str(PM$cbwd)
+```
+##### B. 데이터 분할
+데이터를 질적자료와 양적자료로 나누어준다.
+```{r}
+PM.factor <- PM %>% 
+  purrr::keep(is.factor)
+PM.numeric <- PM %>% 
+  purrr::keep(is.numeric)
+```
+##### C. 질적자료의 분석
+```{r}
+sort(table(PM.factor$location), decreasing = TRUE)
+sort(table(PM.factor$cbwd), decreasing = TRUE)
+sort(round(prop.table(table(PM.factor$cbwd)) * 100, digits = 1), decreasing = TRUE)
+```
+
+```{r}
+library(RColorBrewer)
+
+color.palette <- sort(RColorBrewer::brewer.pal(n = 5, name = "Blues"), decreasing = FALSE)
+barplot(sort(table(PM.factor$cbwd), decreasing = TRUE), col = color.palette, 
+        main = "cbwd", ylim = c(0, 20000))
+```
+##### D. 양적자료의 분석
+```{r}
+Mean <- c()
+trim.Mean <- c()
+Median <- c()
+Mode <- c()
+Range <- c()
+IQR.data <- c()
+var.data <- c()
+sd.data <- c()
+mad.data <- c()
+for(i in 1:ncol(PM.numeric)){
+  Mean <- c(Mean, mean(PM.numeric[, i], na.rm = TRUE))
+  trim.Mean <- c(trim.Mean, mean(PM.numeric[, i], trim = 0.05, na.rm = TRUE))
+  Median <- c(Median, median(PM.numeric[, i], na.rm = TRUE))
+  Mode <- c(Mode, prettyR::Mode(PM.numeric[, i], na.rm = TRUE))
+  Range <- c(Range, diff(range(PM.numeric[, i], na.rm = TRUE)))
+  IQR.data <- c(IQR.data, IQR(PM.numeric[, i], na.rm = TRUE))
+  var.data <- c(var.data, var(PM.numeric[, i], na.rm = TRUE))
+  sd.data <- c(sd.data, sd(PM.numeric[, i], na.rm = TRUE))
+  mad.data <- c(mad.data, mad(PM.numeric[, i], na.rm = TRUE))
+}
+result <- data.frame(Variable = colnames(PM.numeric), Mean, trim.Mean, Median, Mode, Range,
+                     IQR = IQR.data, var = var.data, sd = sd.data, mad = mad.data)
+result
+```
+
+```{r}
+for(i in 1:(ncol(PM.numeric))){
+  boxplot(PM.numeric[, i], main = colnames(PM.numeric)[i])
+}
+```
+
+#### **ii) NA값 처리**
+
+##### A. SO2, CO, O3, NO2, PM10
+대기오염물질은 에어코리아에서 이상치가 측정되었을 때 -999로 표기한다고 알려주었다. 이를 NA로 바꿔준다.
+```{r}
+PM$SO2 <- ifelse(PM$SO2 < 0, NA, PM$SO2)
+PM$CO <- ifelse(PM$CO < 0, NA, PM$CO)
+PM$O3 <- ifelse(PM$O3 < 0, NA, PM$O3)
+PM$NO2 <- ifelse(PM$NO2 < 0, NA, PM$NO2)
+PM$PM10 <- ifelse(PM$PM10 < 0, NA, PM$PM10)
+```
+
+##### B. kospi 이외의 NA값이 있는 변수들
+boxplot을 봤을때 평균을 넣는다면 이상치가 들어가기 때문에 중위수를 넣는다.
+```{r}
+PM[is.na(PM$SO2), 'SO2'] <- median(PM$SO2, na.rm = TRUE)
+PM[is.na(PM$CO), 'CO'] <- median(PM$CO, na.rm = TRUE)
+PM[is.na(PM$O3), 'O3'] <- median(PM$O3, na.rm = TRUE)
+PM[is.na(PM$NO2), 'NO2'] <- median(PM$NO2, na.rm = TRUE)
+PM[is.na(PM$ws), 'ws'] <- median(PM$ws, na.rm = TRUE)
+PM[is.na(PM$pres), 'pres'] <- mean(PM$pres, na.rm = TRUE)
+PM[is.na(PM$cbwd), 'cbwd'] <- prettyR::Mode(PM$cbwd, na.rm = TRUE)
+PM$cbwd <- as.factor(PM$cbwd)
+
+PM[is.na(PM$PM10), 'PM10'] <- median(PM$PM10, na.rm = TRUE)
+```
+##### C. prec
+prec는 기상청에 QnA에 올라온 자료를 보면, 센서의 최소 측정 수준이 0.1mm이기 때문에 그 이하는 0으로 표시되어 있으며 강수가 없는날에는 측정하지 않기 때문에 NA로 측정되어 있다고 한다.
+```{r}
+PM$prec <- ifelse(PM$prec == 0, 0.1, PM$prec)
+PM[is.na(PM$prec), 'prec'] <- 0
+```
+
+##### D. kospi
+kospi는 NA값이 너무 많아서 전부 평균이나 중위수로 넣는다면 한 데이터 값만 너무 많은 개수를 가지게 된다.<br>
+그래서 kospi를 타겟변수로 하는 회귀분석을 돌려서 회귀식을 만든 후 kospi값을 예측하여 예측값으로 NA를 대체한다.
+```{r}
+summary(PM$kospi)
+PM.kospi <- PM[complete.cases(PM$kospi), ]
+PM.kospi.model <- lm(kospi ~ ., data = PM.kospi)
+
+PM.kospi.na <- PM[!complete.cases(PM$kospi), ]
+PM[is.na(PM$kospi), 'kospi'] <- predict(PM.kospi.model, PM.kospi.na)
+summary(PM$kospi)
+```
+
+##### E. month, day
+month와 day는 반복되는 변수기 때문에 순환형 변수로 만들어 준다.
+```{r}
+PM$month.x <- sin((360 / 12) * PM$month)
+PM$month.y <- cos((360 / 12) * PM$month)
+day.x <- c()
+day.y <- c()
+for(i in 1:73050){
+  if(PM$year[i] %in% c(2012, 2016)){
+    if(PM$month[i] %in% c(1, 3, 5, 7, 8, 10, 12)){
+      day.date <- 31
+    } else if(PM$month[i] == 2){
+      day.date <- 29
+    } else {
+      day.date <- 30
+    }
+  } else {
+    if(PM$month[i] %in% c(1, 3, 5, 7, 8, 10, 12)){
+      day.date <- 31
+    } else if(PM$month[i] == 2){
+      day.date <- 28
+    } else {
+      day.date <- 30
+    }
+  }
+  day.x <- c(day.x, sin((360 / day.date) * PM$day[i]))
+  day.y <- c(day.y, cos((360 / day.date) * PM$day[i]))
+}
+PM$day.x <- day.x
+PM$day.y <- day.y
+PM$month <- NULL
+PM$day <- NULL
+```
+
+### **3. 회귀분석**
+
+#### **i) 데이터 나누기**
+2010년 ~ 2015년의 데이터를 이용하여 2016년 ~ 2017년의 미세먼지를 예측할 수 있는지를 알아보기 위해 <br>
+2010년 ~ 2015년 데이터를 train데이터로, 2016년 ~ 2017년 데이터를 test데이터로 사용한다.
+```{r}
+PM.train <- PM %>% 
+  dplyr::filter(year <= 2015)
+PM.test <- PM %>% 
+  dplyr::filter(year > 2015)
+head(PM.train$year)
+tail(PM.train$year)
+head(PM.test$year)
+tail(PM.test$year)
+```
+
+#### **ii) 1차 회귀분석**
+train데이터에 회귀분석을 실시하여 회귀식을 얻어내고, stepwise로 변수선택을 한다.
+```{r}
+PM.model <- lm(PM10 ~ ., data = PM.train)
+summary(PM.model)
+```
+회귀식을 얻었으니, 이를 활용하여 타겟변수의 값을 예측하고, 실제값과 비교하여 RMSE값을 계산한다.
+```{r}
+predict.data <- predict(PM.model, PM.test)
+PM.test$predict <- predict.data
+PM.test$Error <- (PM.test$PM10 - PM.test$predict) ** 2
+sqrt(mean(PM.test$Error))
+```
+
+#### **iii) RMSE값 낮추기**
+미세먼지는 이전 날짜의 미세먼지의 농도에 영향을 받는다.
+```{r}
+ago1 <- c(0, PM$PM10[1:73049])
+ago2 <- c(0, ago1[1:73049])
+ago3 <- c(0, ago2[1:73049])
+ago4 <- c(0, ago3[1:73049])
+ago5 <- c(0, ago4[1:73049])
+ago6 <- c(0, ago5[1:73049])
+
+PM$PM10ago1 <- ago1
+PM$PM10ago2 <- ago2
+PM$PM10ago3 <- ago3
+PM$PM10ago4 <- ago4
+PM$PM10ago5 <- ago5
+PM$PM10ago6 <- ago6
+```
+
+#### **iv) 2차 회귀분석**
+1차와 동일한 방법으로 회귀분석을 실시한다.<br>
+이 때 새로운 변수를 train과 test가 합쳐져있는 PM에 넣었으니, 다시 train과 test를 나눠준다.
+```{r}
+PM.train <- PM %>% 
+  dplyr::filter(year <= 2015)
+PM.test <- PM %>% 
+  dplyr::filter(year > 2015)
+
+PM.model <- lm(PM10 ~ ., data = PM.train)
+summary(PM.model)
+PM.stepwise.model <- step(PM.model, direction = 'both')
+summary(PM.stepwise.model)
+```
+
+```{r}
+predict.data <- predict(PM.model, PM.test)
+PM.test$predict <- predict.data
+PM.test$Error <- (PM.test$PM10 - PM.test$predict) ** 2
+RMSE <- sqrt(mean(PM.test$Error))
+RMSE
+```
+
+```{r}
+Mean <- mean(PM.test$PM10)
+Mean
+predict.rate <- round((1 - (RMSE / Mean)) * 100, digits = 1)
+paste0(predict.rate, '%')
+```
+
+#### **v) 표준화된 회귀계수**
+양적 자료만 표준화를 진행한다.
+```{r}
+PM.normal <- PM
+for(i in 1:ncol(PM.normal)){
+  if(is.numeric(PM.normal[i])){ 
+    PM.normal[, i] <- scale(PM.normal[, i])
+  }
+}
+```
+
+```{r}
+PM.normal.train <- PM.normal %>% 
+  dplyr::filter(year <= 2015)
+PM.normal.test <- PM.normal %>% 
+  dplyr::filter(year > 2015)
+
+PM.normal.model <- lm(PM10 ~ ., data = PM.normal.train)
+summary(PM.normal.model)
+PM.normal.stepwise.model <- step(PM.normal.model, direction = 'both')
+summary(PM.normal.stepwise.model)
+```
+
+```{r}
+predict.data <- predict(PM.normal.model, PM.normal.test)
+PM.normal.test$predict <- predict.data
+PM.normal.test$Error <- (PM.normal.test$PM10 - PM.normal.test$predict) ** 2
+RMSE <- sqrt(mean(PM.normal.test$Error))
+RMSE
+```
+
+```{r}
+Mean <- mean(PM.normal.test$PM10)
+Mean
+predict.rate <- round((1 - (RMSE / Mean)) * 100, digits = 1)
+paste0(predict.rate, '%')
+```
+

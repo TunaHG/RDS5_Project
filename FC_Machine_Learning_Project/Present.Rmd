@@ -1,0 +1,453 @@
+---
+title: "Machine Learning Project"
+author: "Team 1 (ÀÌ¿©Àº Á¶Èñ¿¬ ±èÇÏ±Õ ÀÌÁöÀº)"
+date: "2019³â 3¿ù 1ÀÏ"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# **ÁÖÁ¦**
+¿©ÇàÀÇ ¸ñÀû¿¡ ¸Â´Â ¼÷¼Ò ºĞ·ù
+
+## **¸ñÂ÷**
+1. µ¥ÀÌÅÍ ¸¸µé±â <br>
+2. µ¥ÀÌÅÍ ÀüÃ³¸® <br>
+3. ÅØ½ºÆ® ¸¶ÀÌ´× <br>
+4. ÅäÇÈ ¸ğµ¨¸µ <br>
+5. ·£´ı Æ÷·¹½ºÆ® <br>
+
+### **1. µ¥ÀÌÅÍ ¸¸µé±â**
+
+#### **(1) µ¥ÀÌÅÍ Å©·Ñ¸µ**
+|»ç¿ëµ¥ÀÌÅÍ  | µ¥ÀÌÅÍ ¼öÁı »çÀÌÆ®      | »çÀÌÆ® ¸µÅ©               |
+|:----------:|:------------------------|:--------------------------|
+|¼÷¼ÒÈÄ±â    | ¿¡¾îºñ¾Øºñ              | https://www.airbnb.co.kr/ |
+
+#####**i) ¼±Çà ÀÛ¾÷**
+Å©·Ñ¸µ¿¡ ¾Õ¼­ ÀÌ¹ø ÇÁ·ÎÁ§Æ®¿¡¼­ »ç¿ëÇÒ ¶óÀÌºê·¯¸®¿Í ÀÛ¾÷°ø°£À» ¼³Á¤
+```{r, message = FALSE}
+setwd("C:/FastCampus/ML Project/")
+
+library(tidyverse)
+library(httr)
+library(rvest)
+library(jsonlite)
+library(topicmodels)
+library(LDAvis)
+library(servr)
+library(tm)
+library(slam)
+library(NLP4kec)
+library(wordcloud2)
+library(RColorBrewer)
+library(randomForest)
+```
+
+##### **ii) ¼÷¼Ò ID Å©·Ñ¸µ**
+ÈÄ±â Å©·Ñ¸µÀ» À§ÇÑ Ã¹¹øÂ° ÀÛ¾÷À¸·Î Á¦ÁÖµµ¸¦ °Ë»öÇßÀ»¶§ ³ª¿À´Â °¢ ¼÷¼ÒÀÇ ID¸¦ ¾Ë¾Æ¾ßÇÔ
+±×·¡¼­ Á¦ÁÖµµ¸¦ °Ë»öÇÏ¸é ³ª¿À´Â »çÀÌÆ®¿¡¼­ ¿©·¯ ¼÷¼ÒÀÇ ID¸¦ ÇÑ¹ø¿¡ °¡Á®¿È
+ÀÌ ¶§, Á¦ÁÖµµ´Â Å©·Ñ¸µ ¼ö¾÷¶§ »ç¿ëÇÑ Source¸¦ ÀÌ¿ëÇÏ¿© ÆÛ¼¾Æ® ÀÎÄÚµùÀ» ÁøÇàÇÔ
+```{r}
+# word <- 'Á¦ÁÖµµ'
+# source(file = '../Crawling/R/pcntEncodingFuns.R')
+# num <- seq(from = 0, to = 288, by = 18)
+# home.result <- data.frame()
+# for(i in num){
+#   res <- GET(url = 'https://www.airbnb.co.kr/api/v2/explore_tabs',
+#              query = list(`_format` = 'for_explore_search_web',
+#                           items_per_grid = '18',
+#                           selected_tab_id = 'home_tab',
+#                           items_offset = i,
+#                           query = word %>% pcntEncoding2Utf8(),
+#                           key = 'd306zoyjsyarp7ifhu67rjxn52tv0t20'))
+#   
+#   home <- res %>% content(as = 'text', encoding = 'UTF-8') %>% fromJSON()
+#   id <- home$explore_tabs$sections %>% `[[`(1) %>% `[`(, 'listings') %>% `[[`(1) %>% `$`(listing) %>% `$`(id)
+#   star <- home$explore_tabs$sections %>% `[[`(1) %>% `[`(, 'listings') %>% `[[`(1) %>% `$`(listing) %>% `$`(star_rating)
+#   name <- home$explore_tabs$sections %>% `[[`(1) %>% `[`(, 'listings') %>% `[[`(1) %>% `$`(listing) %>% `$`(name)
+#   
+#   agg <- data.frame(id, star, name)
+#   home.result <- rbind(home.result, agg)
+# }
+load(file = 'home.Rdata')
+head(home.result, 5)
+```
+
+##### **iii) ÈÄ±â °³¼ö Å©·Ñ¸µ**
+ÈÄ±â Å©·Ñ¸µÀ» À§ÇÑ µÎ¹øÂ° ÀÛ¾÷À¸·Î ÇØ´ç ¼÷¼Ò¿¡ ÈÄ±â°¡ ÃÑ ¸î°³°¡ ÀÖ´ÂÁö¸¦ ¾Ë¾Æ¾ß ÇÔ
+```{r}
+# count.result <- c()
+# for(i in home.result$id){
+#   res2 <- GET(url = paste0('https://www.airbnb.co.kr/rooms/', i))
+#   
+#   review <- res2 %>% 
+#     read_html() %>% 
+#     html_node(css = 'div._vy3ibx h1') %>% 
+#     html_text() %>% 
+#     str_extract(pattern = '\\d+')
+#   count.result <- c(count.result, review)
+# }
+# count.result <- ifelse(is.na(count.result), 0, count.result)
+load(file = 'count.Rdata')
+head(count.result, 5)
+```
+
+##### **iv)ÈÄ±â Å©·Ñ¸µ**
+```{r}
+# review.result <- data.frame()
+# for(i in 1:306){
+#   num <- seq(from = 0, to = count.result[i], by = 7)
+#   for(j in num){
+#     res3 <- GET(url = 'https://www.airbnb.co.kr/api/v2/reviews',
+#                 query = list(key = 'd306zoyjsyarp7ifhu67rjxn52tv0t20',
+#                              currency = 'KRW',
+#                              locale = 'ko',
+#                              listing_id = home.result$id[i],
+#                              role = 'guest',
+#                              `_format` = 'for_p3',
+#                              `_limit` = '7',
+#                              `_offset` = j,
+#                              `_order` = 'combined_ranker_v1'))
+#     
+#     json <- res3 %>% content(as = 'text', encoding = 'UTF-8') %>% fromJSON()
+#     comments <- json$reviews$comments
+#     mer <- data.frame(Home = rep(home.result$name[i], time = length(comments)), Comments = comments)
+#     review.result <- rbind(review.result, mer)
+#   }
+#   cat(i, '¹øÂ° ½ÇÇàÁß\n')
+# }
+load(file = 'review.Rdata')
+head(review.result, 5)
+```
+
+### **2. µ¥ÀÌÅÍ ÀüÃ³¸®**
+ÇÑ±ÛÀ» ¸ñÇ¥·Î ÅØ½ºÆ® ¸¶ÀÌ´×À» ÁøÇàÇÒ °ÍÀÌ¹Ç·Î ÇÑ±ÛÀÌ ¾Æ´Ñ ±ÛÀÚµéÀ» »èÁ¦ÇÔ
+
+#### **(1) ÇÑ±ÛÀÌ ¾ø´Â ÈÄ±â »èÁ¦**
+```{r}
+for(i in 1:nrow(review.result)){
+  review.result[i, 2] <- ifelse(str_detect(review.result[i, 2], pattern = '[°¡-ÆR]'), review.result[i, 2], NA)
+}
+```
+
+#### **(2) ¿µ¾î°¡ ÁÖ·Î µÈ ÈÄ±â »èÁ¦**
+```{r}
+for(i in 1:nrow(review.result)){
+  review.result[i, 2] <- ifelse(str_detect(review.result[i, 2], pattern = '[A-z]'), 
+                                ifelse(str_extract_all(review.result[i, 2], pattern = '[°¡-ÆR]+(?= )') %>% 
+                                         `[[`(1) %>% 
+                                         length() <= 5,
+                                       NA, 
+                                       review.result[i, 2]), 
+                                review.result[i, 2])
+}
+review.result <- review.result[complete.cases(review.result), ]
+```
+
+#### **(3) ÇÑ±ÛÀÌ ¾Æ´Ñ ¸ğµç ¹®ÀÚ »èÁ¦**
+```{r}
+review.result[ , 2] <- str_remove_all(review.result[ , 2], pattern = '[^°¡-ÆR]')
+review.result[ , 2] <- str_remove_all(review.result[ , 2], pattern = '[¤¡-¤Ó]')
+review.result[ , 2] <- str_remove_all(review.result[ , 2], pattern = '\\W')
+```
+
+#### **(4) ÈÄ±â ±ÛÀÚ¼ö Á¦ÇÑ**
+```{r}
+len <- nchar(review.result[, 2])
+len <- ifelse(len <= 30, FALSE,
+              ifelse(len > 800, FALSE, TRUE))
+review.result <- review.result[len, ]
+rownames(review.result) <- 1:nrow(review.result)
+```
+
+
+### **3. ÅØ½ºÆ® ¸¶ÀÌ´×**
+
+#### **(1) ÅØ½ºÆ® ÆÄ½ÌÇÏ±â**
+```{r}
+parsed_data <- r_parser_r(review.result$Comments, language = 'ko', useEn = F)
+```
+
+#### **(2) ¸»¹¶Ä¡ ÀÛ¾÷**
+```{r}
+corp <- tm::VCorpus(VectorSource(parsed_data))
+
+corp <- tm_map(corp, removePunctuation)
+corp <- tm_map(corp, removeNumbers)
+
+corp <- tm_map(corp, PlainTextDocument)
+```
+
+#### **(3) DTM ÀÛ¾÷**
+```{r}
+dtm <- DocumentTermMatrix(corp, control=list(wordLengths=c(2,Inf)))
+
+colnames(dtm) <- trimws(colnames(dtm))
+dtm <- dtm[,nchar(colnames(dtm)) > 1]
+
+dtm <- removeSparseTerms(dtm, as.numeric(0.997))
+```
+
+#### **(4) WordCloud ÀÛ¾÷**
+```{r}
+wordsFreq <- dtm %>% as.matrix() %>% colSums() %>% round(digits = 2)
+wordsFreq <- wordsFreq[order(wordsFreq, decreasing = TRUE)]
+wordDf <- data.frame(word = names(wordsFreq),
+                      freq = wordsFreq,
+                      row.names = NULL) %>% 
+  arrange(desc(freq))
+
+myPal <- brewer.pal(n = 8, name = 'Set2')
+
+wordcloud2(
+  data = wordDf[1:300, ],
+  size = 2,
+  color = myPal,
+  backgroundColor = 'white',
+  shape = 'circle',
+  ellipticity = 0.75,
+  minRotation = -pi / 4,
+  maxRotation = pi / 4,
+  shuffle = TRUE,
+  rotateRatio = 0.25)
+```
+
+#### **(5) »çÀüÀ» Ãß°¡ÇÏ¿© ÅØ½ºÆ® ÆÄ½ÌÇÏ±â**
+```{r}
+parsed_data <- r_parser_r(review.result$Comments, language = 'ko', useEn = F,
+                          korDicPath = '27/dic.txt')
+```
+
+#### **(6) ºÒ¿ë¾î»çÀüÀ» ÀÌ¿ëÇÑ ¸»¹¶Ä¡ ÀÛ¾÷**
+```{r}
+corp <- tm::VCorpus(VectorSource(parsed_data))
+
+corp <- tm_map(corp, removePunctuation)
+corp <- tm_map(corp, removeNumbers)
+
+stop1 <- read.table(file = '27/stop.txt', sep = '\n', header = FALSE, stringsAsFactors = FALSE)
+stop2 <- read.table(file = '27/stop2.txt', sep = '\n', header = FALSE, stringsAsFactors = FALSE)
+stop3 <- read.table(file = '27/stop3.txt', sep = '\n', header = FALSE, stringsAsFactors = FALSE)
+stop4 <- read.table(file = '27/stop4.txt', sep = '\n', header = FALSE, stringsAsFactors = FALSE)
+stop <- c(stop1[, 1], stop2[, 1], stop3[, 1])
+rm(stop1, stop2, stop3, stop4)
+
+corp <- tm_map(corp, removeWords, stop)
+
+corp <- tm_map(corp, PlainTextDocument)
+```
+
+#### **(7) DTM ÀÛ¾÷**
+```{r}
+dtm <- DocumentTermMatrix(corp, control=list(wordLengths=c(2,Inf)))
+
+colnames(dtm) <- trimws(colnames(dtm))
+dtm <- dtm[,nchar(colnames(dtm)) > 1]
+
+dtm <- removeSparseTerms(dtm, as.numeric(0.997))
+```
+
+### **4. ÅäÇÈ ¸ğµ¨¸µ**
+
+#### **(1) TF-IDF ¸ğµ¨ ¸¸µé±â**
+```{r}
+term_tfidf = tapply(dtm$v/row_sums(dtm)[dtm$i], dtm$j, mean) * log2(nDocs(dtm)/col_sums(dtm > 0))
+```
+
+#### **(2) DTM Å©±â ÁÙÀÌ±â**
+```{r}
+new_dtm = dtm[,term_tfidf >= 0.2]
+new_dtm = new_dtm[row_sums(new_dtm) > 0,]
+```
+
+#### **(3) µ¥ÀÌÅÍ ³ª´©±â**
+```{r}
+set.seed(seed = 123)
+index <- sample(1:2,
+                size = nrow(dtm),
+                prob = c(0.7, 0.3),
+                replace = TRUE)
+train <- new_dtm[index == 1, ]
+test <- new_dtm[index == 2, ]
+```
+
+#### **(4) LDA ÆÄ¶ó¹ÌÅÍ °ª ¼¼ÆÃ**
+```{r}
+control_LDA_Gibbs = list(alpha = 1, estimate.beta = TRUE, verbose = 0, prefix = tempfile(),
+                         save = 0, keep = 0, seed = 1, nstart = 1,
+                         best = TRUE, delta = 0.1, iter = 5000)
+```
+
+#### **(5) LDA ¸ğµ¨¸µ**
+```{r}
+lda_tm = LDA(x = train, 
+             k = 3, 
+             method = "Gibbs", 
+             control = control_LDA_Gibbs)
+```
+
+#### **(6) ¸ğµ¨ È®ÀÎ**
+```{r}
+term_topic = terms(lda_tm, 50)
+term_topic
+```
+Topic 1 ¼÷¼Ò ÀÚÃ¼ÀÇ ÆíÀÇ¼º : ½Ã¼³¿¡ °­Á¡ÀÌ ÀÖ´Â ¼÷¼Ò·Î ÃâÀå È¤Àº Àá¸¸ ÀÚ·Á´Â 1ÀÎ ¿©Çà¿¡ ÀûÇÕ <br>
+Topic 2 ¼÷¼ÒÀÇ ºĞÀ§±â : ¿©ÇàÀÇ ¸ñÀûÀÌ Èú¸µÀÌ°Å³ª ¼÷¼Òµµ ¿©ÇàÀÇ ÀÏºÎ·Î º¸´Â °¡Á·, Ä¿ÇÃ ´ÜÀ§¿¡°Ô ÃßÃµ <br>
+Topic 3 ¼÷¼Ò ÁÖº¯ ÆíÀÇ½Ã¼³ : À§Ä¡ ÀÚÃ¼°¡ ÁÁ°Å³ª ¶Ñ¹÷ÀÌµé¿¡°Ô ÀûÇÕ <br>
+
+#### **(7) LDA ½Ã°¢È­**
+½Ã°¢È­¸¦ ÁøÇàÇÏ¸é ÀÎÄÚµùÀÌ ±úÁ®¼­ ´Ü¾î°¡ º¸ÀÌÁö ¾Ê±â ¶§¹®¿¡ °¢ ±×·ìÀÌ ºĞÇÒµÇ¾î ÀÖ´Â °Í¸¸ È®ÀÎ
+```{r}
+# # phi´Â °¢ ´Ü¾îº° ÅäÇÈ¿¡ Æ÷ÇÔµÉ È®·ü°ª ÀÔ´Ï´Ù.
+# phi <- posterior(lda_tm)$terms %>% as.matrix
+# 
+# # theta´Â °¢ ¹®¼­º° ÅäÇÈ¿¡ Æ÷ÇÔµÉ È®·ü°ª ÀÔ´Ï´Ù.
+# theta <- posterior(lda_tm)$topics %>% as.matrix
+# 
+# # vocab´Â ÀüÃ¼ ´Ü¾î ¸®½ºÆ® ÀÔ´Ï´Ù.
+# vocab <- colnames(phi)
+# 
+# # ¹®¼­º° ÅäÇÈ ¹øÈ£ ÀúÀåÇÏ±â
+# doc_topic <- topics(lda_tm, 1)
+# 
+# # °¢ ¹®¼­º° ¹®¼­ ±æÀÌ¸¦ ±¸ÇÕ´Ï´Ù.
+# doc_length <- vector()
+# doc_topic_df <- as.data.frame(doc_topic)
+# 
+# for(i in as.numeric(row.names(doc_topic_df))){
+#   temp <- corp[[i]]$content
+#   doc_length <- c(doc_length, nchar(temp[1]))
+# }
+# 
+# # °¢ ´Ü¾îº° ºóµµ¼ö¸¦ ±¸ÇÕ´Ï´Ù.
+# new_dtm_m <- as.matrix(new_dtm)
+# freq_matrix <- data.frame(ST = colnames(new_dtm_m),
+#                          Freq = colSums(new_dtm_m))
+# 
+# # À§¿¡¼­ ±¸ÇÑ °ªµéÀ» ÆÄ¶ó¸ŞÅÍ °ªÀ¸·Î ³Ñ°Ü¼­ ½Ã°¢È­¸¦ ÇÏ±â À§ÇÑ µ¥ÀÌÅÍ¸¦ ¸¸µé¾î Áİ´Ï´Ù.
+# source("27/createJsonForChart_v2.R")
+# json_lda <- createJson(phi = phi,
+#                        theta = theta,
+#                        vocab = vocab,
+#                        doc.length = doc_length,
+#                        term.frequency = freq_matrix$Freq,
+#                        mds.method = canberraPCA
+# )
+# 
+# name = "Visualization"
+# k = 3
+# 
+# # ÅèÄ¹À¸·Î º¸³»±â
+# serVis(json_lda, out.dir = paste("C:/apache-tomcat-8.5.38/webapps/",name,"_",k,sep=""), open.browser = T)
+```
+
+### **5. ·£´ı Æ÷·¹½ºÆ®¸¦ È°¿ëÇÑ ¿¹Ãø**
+
+#### **(1) ÅäÇÈµ¥ÀÌÅÍ º¯È¯**
+```{r}
+doc_topic <- topics(lda_tm, 1)
+doc_topic_f <- as.factor(doc_topic)
+doc_topic_df <- as.data.frame(doc_topic_f)
+```
+
+#### **(2) ÈÆ·Ã¼Â º¯È¯**
+```{r}
+train_m <- as.matrix(train)
+train_df <- as.data.frame(train_m)
+```
+
+#### **(3) ÈÆ·Ã¼Â ¶óº§¸µ**
+```{r}
+train_topic_df <- cbind(train_df, doc_topic_df)
+```
+
+#### **(4) ½ÃÇè¼Â º¯È¯**
+```{r}
+test_m <- as.matrix(test)
+test_df <- as.data.frame(test_m)
+```
+
+#### **(5) ·£´ı Æ÷·¹½ºÆ® ÇÏÀÌÆÛ ÆÄ¶ó¹ÌÅÍ Á¤ÀÇ**
+```{r}
+# ntree = c(20, 100, 500, 1000)
+# mtry = c(25, 30, 35, 40, 45)
+# nodesize = c(2, 5, 8, 10)
+# maxnodes = c(2, 5, 8, 10, 20, 50, 100)
+```
+
+#### **(6) ·£´ı Æ÷·¹½ºÆ® ±×¸®µå Å½»ö**
+```{r}
+# tree_result <- matrix(0, length(ntree)*length(mtry)*length(nodesize)*length(maxnodes),24)
+# iter_cnt = 1
+# 
+# for(i in 1:length(ntree)){
+#   for(j in 1:length(mtry)){
+#     for(k in 1:length(nodesize)){
+#       for(l in 1:length(maxnodes)){
+#         cat('ntree : ', ntree[i],
+#             ', mtry : ', mtry[j],
+#             ', nodesize : ', nodesize[k],
+#             ', maxnodes : ',  maxnodes[l], '\n')
+#         
+#         tmp_rf <- randomForest(x = train_topic_df[, -812],
+#                                y = train_topic_df[, 812],
+#                                ntree = ntree[i],
+#                                mtry = mtry[j],
+#                                nodesize = nodesize[k],
+#                                maxnodes = maxnodes[l])
+#         
+#         tmp_rf_val_pred <- predict(tmp_rf, newdata = test_tmp, type = 'class')
+#         
+#         tree_result[iter_cnt, 1] = ntree[i]
+#         tree_result[iter_cnt, 2] = mtry[j]
+#         tree_result[iter_cnt, 3] = nodesize[k]
+#         tree_result[iter_cnt, 4] = maxnodes[l]
+#         for(m in 1:20){
+#           tree_result[iter_cnt, 4+m] <- tmp_rf_val_pred[m]
+#         }
+#         
+#         iter_cnt = iter_cnt +1
+#       }
+#     }
+#   }
+# }
+# 
+# colnames(tree_result) <-  c('ntree', 'mtry', 'nodesize', 'maxnodes', 
+#                             'Review1', 'Review2', 'Review3', 'Review4',
+#                             'Review5', 'Review6', 'Review7', 'Review8',
+#                             'Review9', 'Review10', 'Review11', 'Review12',
+#                             'Review13', 'Review14', 'Review15', 'Review16',
+#                             'Review17', 'Review18', 'Review19', 'Review20')
+# writexl::write_xlsx(tree_result, path = '27/result.xlsx')
+tree_result <- readxl::read_excel(path = '27/result.xlsx', sheet = 1)
+head(tree_result, 5)
+```
+
+#### **(7) ÃÖÁ¾ ·£´ıÆ÷·¹½ºÆ®**
+```{r}
+set.seed(seed = 123)
+fitRFC <- randomForest(x = train_topic_df[, -ncol(train_topic_df)],
+                       y = train_topic_df[, ncol(train_topic_df)],
+                       ntree = 20,
+                       mtry = 35,
+                       nodesize = 10,
+                       maxnodes = 100)
+```
+
+#### **(8) ½ÃÇè¼Â ¶óº§¸µ**
+```{r}
+# test_topic <- predict(fitRFC, newdata = test_df)
+# test_df$topic <- test_topic
+load(file = 'test_df.Rdata')
+head(test_df, 5)
+```
+
+#### **(9) ¶óº§¸µ È®ÀÎ**
+```{r}
+review <- review.result[index == 2, ]
+show <- data.frame(Review = review[1:20, 2], Topic = test_df[1:20, ncol(test_df)])
+show
+```
